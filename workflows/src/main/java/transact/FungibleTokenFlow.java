@@ -1,40 +1,58 @@
 package transact;
 
-import co.paralleluniverse.fibers.Suspendable;
-
 import java.util.Currency;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import com.r3.corda.lib.tokens.contracts.states.FungibleToken;
+import com.r3.corda.lib.tokens.contracts.types.TokenPointer;
 import com.r3.corda.lib.tokens.contracts.types.TokenType;
-import com.r3.corda.lib.tokens.workflows.flows.rpc.*;
+import com.r3.corda.lib.tokens.workflows.flows.rpc.CreateEvolvableTokens;
+import com.r3.corda.lib.tokens.workflows.flows.rpc.IssueTokens;
+import com.r3.corda.lib.tokens.workflows.flows.rpc.MoveFungibleTokens;
+import com.r3.corda.lib.tokens.workflows.flows.rpc.MoveFungibleTokensHandler;
 import com.r3.corda.lib.tokens.workflows.utilities.FungibleTokenBuilder;
-import net.corda.core.identity.CordaX500Name;
-import  states.FungibleTokenState;
+import com.r3.corda.lib.tokens.workflows.utilities.QueryUtilities;
+
+import co.paralleluniverse.fibers.Suspendable;
 import kotlin.Unit;
-import net.corda.core.contracts.*;
-import net.corda.core.flows.*;
+import net.corda.core.contracts.Amount;
+import net.corda.core.contracts.StateAndRef;
+import net.corda.core.contracts.TransactionState;
+import net.corda.core.contracts.UniqueIdentifier;
+import net.corda.core.flows.FlowException;
+import net.corda.core.flows.FlowLogic;
+import net.corda.core.flows.FlowSession;
+import net.corda.core.flows.InitiatedBy;
+import net.corda.core.flows.InitiatingFlow;
+import net.corda.core.flows.StartableByRPC;
+import net.corda.core.identity.CordaX500Name;
 import net.corda.core.identity.Party;
 import net.corda.core.transactions.SignedTransaction;
+import net.corda.core.utilities.ProgressTracker;
+import  states.FungibleTokenState;
 
 /**
  * Create,Issue,Move,Redeem token flows for a house asset on ledger
  * This is all-in-one implementation style.
  */
-public class FungibleTokenFlow {
+public interface FungibleTokenFlow {
 
     /**
      * Create Fungible Token for a house asset on ledger
      */
     @StartableByRPC
-    public static class CreateHouseTokenFlow extends FlowLogic<SignedTransaction> {
+    public static class CreateToken extends FlowLogic<SignedTransaction> {
 
         // valuation property of a house can change hence we are considering house as a evolvable asset
         private final String assetName;
+        private final String assetDescription;
         private final String symbol;
 
-        public CreateHouseTokenFlow(String assetName,String symbol ) {
+        public CreateToken(String assetName,String assetDescription ,String symbol ) {
             this.assetName = assetName ;
+            this.assetDescription= assetDescription;
             this.symbol = symbol;
         }
 
@@ -45,7 +63,7 @@ public class FungibleTokenFlow {
             /** Explicit selection of notary by CordaX500Name - argument can by coded in flows or parsed from config (Preferred)*/
             final Party notary = getServiceHub().getNetworkMapCache().getNotary(CordaX500Name.parse("O=Notary,L=London,C=GB"));
             //create token type
-            FungibleTokenState evolvableTokenType = new FungibleTokenState(assetName, getOurIdentity(),
+            FungibleTokenState evolvableTokenType = new FungibleTokenState(assetName,assetDescription,getOurIdentity(),
                     new UniqueIdentifier(), null, 0, this.symbol);
 
             //wrap it with transaction state specifying the notary
@@ -60,10 +78,10 @@ public class FungibleTokenFlow {
      *  Issue Fungible Token against an evolvable house asset on ledger
      */
     @StartableByRPC
-    public static class IssueHouseTokenFlow extends FlowLogic<SignedTransaction>{
+    public static class IssueTokenProperty extends FlowLogic<SignedTransaction>{
         private final String symbol;
         private final int quantity;
-        public IssueHouseTokenFlow(String symbol, int quantity, Amount<Currency> value) {
+        public IssueTokenProperty(String symbol, int quantity, Amount<Currency> value) {
             this.symbol = symbol;
             this.quantity = quantity;
 
@@ -149,5 +167,48 @@ public class FungibleTokenFlow {
             return subFlow(new MoveFungibleTokensHandler(counterSession));
         }
     }
+    @InitiatingFlow
+    @StartableByRPC
+    public static class GetTokenBalance extends FlowLogic<String> {
+        private final ProgressTracker progressTracker = new ProgressTracker();
+        private final String symbol;
+
+        public GetTokenBalance(String symbol) {
+            this.symbol = symbol;
+        }
+
+        @Override
+        public ProgressTracker getProgressTracker() {
+            return progressTracker;
+        }
+
+        @Override
+        @Suspendable
+        public String call() throws FlowException {
+            //get a set of the RealEstateEvolvableTokenType object on ledger with uuid as input tokenId
+            Set<FungibleTokenState> evolvableTokenTypeSet = getServiceHub().getVaultService().
+                    queryBy(FungibleTokenState.class).getStates().stream()
+                    .filter(sf->sf.getState().getData().getSymbol().equals(symbol)).map(StateAndRef::getState)
+                    .map(TransactionState::getData).collect(Collectors.toSet());
+            if (evolvableTokenTypeSet.isEmpty()){
+                throw new IllegalArgumentException("FungibleHouseTokenState symbol=\""+symbol+"\" not found from vault");
+            }
+
+            // Save the result
+            String result="";
+
+            // Technically the set will only have one element, because we are query by symbol.
+            for (FungibleTokenState evolvableTokenType : evolvableTokenTypeSet){
+                //get the pointer pointer to the house
+                TokenPointer<FungibleTokenState> tokenPointer = evolvableTokenType.toPointer(FungibleTokenState.class);
+                //query balance or each different Token
+                Amount<TokenType> amount = QueryUtilities.tokenBalance(getServiceHub().getVaultService(), tokenPointer);
+                result += "\nYou currently have "+ amount.getQuantity()+ " " + symbol + " Tokens issued by "
+                        +evolvableTokenType.getMaintainer().getName().getOrganisation()+"\n";
+            }
+            return result;
+        }
+    }
+
 }
 

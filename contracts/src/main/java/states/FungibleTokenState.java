@@ -1,34 +1,35 @@
 package states;
 
+import java.util.Currency;
+import java.util.List;
+import java.util.Objects;
+
 import com.google.common.collect.ImmutableList;
 import com.r3.corda.lib.tokens.contracts.states.EvolvableTokenType;
 
+import org.jetbrains.annotations.NotNull;
+
+import  contracts.FungibleTokenContract;
 import net.corda.core.contracts.Amount;
 import net.corda.core.contracts.BelongsToContract;
 import net.corda.core.contracts.UniqueIdentifier;
 import net.corda.core.identity.Party;
-import  contracts.FungibleTokenContract;
-import javafx.scene.shape.CubicCurve;
-
-import org.jetbrains.annotations.NotNull;
-
-import java.util.Currency;
-import java.util.List;
-import java.util.Objects;
 
 @BelongsToContract(FungibleTokenContract.class)
 public class FungibleTokenState extends EvolvableTokenType {
 
     private final String assetName;
+    private final String assetDescription;
     private final Party maintainer;
     private final UniqueIdentifier uniqueIdentifier;
     private final String symbol;
     private final int fractionDigits;
     private final Amount<Currency> value;
 
-    public FungibleTokenState(String assetName, Party maintainer,
+    public FungibleTokenState(String assetName,String assetDescription, Party maintainer,
                                    UniqueIdentifier uniqueIdentifier, Amount<Currency>value, int fractionDigits, String symbol) {
         this.assetName= assetName;
+        this.assetDescription=assetDescription;
         this.maintainer = maintainer;
         this.uniqueIdentifier = uniqueIdentifier;
         this.value=value;
@@ -38,6 +39,9 @@ public class FungibleTokenState extends EvolvableTokenType {
 
         public Amount<Currency> getValue() {
         return value;
+    }
+    public String getAssetDescription(){
+        return assetDescription;
     }
 
         public String getAssetName() {

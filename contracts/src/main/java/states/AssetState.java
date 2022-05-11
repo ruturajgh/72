@@ -1,20 +1,20 @@
 package states;
 
-import  contracts.AssetContract;
+import java.util.Currency;
+import java.util.List;
+
 import com.google.common.collect.ImmutableList;
 import com.r3.corda.lib.tokens.contracts.states.EvolvableTokenType;
 import com.r3.corda.lib.tokens.contracts.types.TokenPointer;
+
+import org.jetbrains.annotations.NotNull;
+
+import  contracts.AssetContract;
 import net.corda.core.contracts.Amount;
 import net.corda.core.contracts.BelongsToContract;
 import net.corda.core.contracts.LinearPointer;
 import net.corda.core.contracts.UniqueIdentifier;
 import net.corda.core.identity.Party;
-
-import org.checkerframework.checker.units.qual.h;
-import org.jetbrains.annotations.NotNull;
-
-import java.util.Currency;
-import java.util.List;
 
 @BelongsToContract(AssetContract.class)
 public class AssetState extends EvolvableTokenType {
